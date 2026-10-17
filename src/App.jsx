@@ -3,6 +3,17 @@ import { supabase } from './lib/supabase.js';
 
 const CATEGORIES = ['미분류', '한식', '양식', '일식', '중식', '디저트', '기타'];
 
+
+// Instagram preview metadata can prepend "2 likes, 3 comments -".
+// Strip only that social-count label; leave the Instagram username and caption intact.
+function removeInstagramCounts(value) {
+  if (typeof value !== 'string') return '';
+  const cleaned = value
+    .replace(/^[ \t]*\d[\d,.]*[kKmMbB]?\s+likes?\s*,\s*\d[\d,.]*[kKmMbB]?\s+comments?\s*(?:[-–—|·:]\s*)?/i, '')
+    .replace(/(^|\r?\n)[ \t]*\d[\d,.]*[kKmMbB]?\s+likes?\s*,\s*\d[\d,.]*[kKmMbB]?\s+comments?[ \t]*(?=\r?\n|$)/gim, '$1');
+  return cleaned === value ? value : cleaned.trimStart();
+}
+
 function normalizeLink(text) {
   const match = (text || '').trim().match(/https:\/\/[^\s]+/i);
   if (!match) return null;
@@ -169,8 +180,8 @@ export default function App() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || '게시물을 가져올 수 없어요.');
       setResult(data);
-      setDraftTitle(data.title || '나의 레시피');
-      setDraftCaption(data.captionCandidate || data.preview || '');
+      setDraftTitle(removeInstagramCounts(data.title || '나의 레시피'));
+      setDraftCaption(removeInstagramCounts(data.captionCandidate || data.preview || ''));
       setDraftCategory('미분류');
       setImageFile(null);
     } catch (err) {
@@ -211,8 +222,8 @@ export default function App() {
       const payload = {
         user_id: user.id,
         original_url: normalizeLink(result.url),
-        title: draftTitle.trim(),
-        caption: draftCaption,
+        title: removeInstagramCounts(draftTitle.trim()),
+        caption: removeInstagramCounts(draftCaption),
         image_url: result.image || null,
         category: draftCategory,
       };
@@ -263,7 +274,7 @@ export default function App() {
 
   function openRecipe(recipe) {
     setSelectedId(recipe.id); setEditing(false);
-    setEditTitle(recipe.title); setEditCaption(recipe.caption); setEditCategory(recipe.category);
+    setEditTitle(removeInstagramCounts(recipe.title)); setEditCaption(removeInstagramCounts(recipe.caption)); setEditCategory(recipe.category);
     setNotice(''); setError('');
   }
 
@@ -273,7 +284,7 @@ export default function App() {
     setSaving(true); setError('');
     try {
       const { error: dbError } = await supabase.from('recipes').update({
-        title: editTitle.trim(), caption: editCaption, category: editCategory,
+        title: removeInstagramCounts(editTitle.trim()), caption: removeInstagramCounts(editCaption), category: editCategory,
       }).eq('id', selected.id);
       if (dbError) throw dbError;
       await loadRecipes(user.id);
@@ -355,8 +366,8 @@ export default function App() {
                 <label htmlFor="edit-category" className="field-top">카테고리</label><select id="edit-category" value={editCategory} onChange={event => setEditCategory(event.target.value)}>{CATEGORIES.map(category => <option key={category}>{category}</option>)}</select>
                 <div className="action-row"><button className="small-primary" onClick={updateRecipe} disabled={saving}>수정 저장</button><button className="small-outline" onClick={() => setEditing(false)}>취소</button></div>
               </> : <>
-                <span className="category-tag">{selected.category}</span><h2>{selected.title}</h2>
-                <div className="caption-block"><div className="field-title">게시글 원문</div><p>{selected.caption || '저장된 글이 없습니다.'}</p></div>
+                <span className="category-tag">{selected.category}</span><h2>{removeInstagramCounts(selected.title)}</h2>
+                <div className="caption-block"><div className="field-title">게시글 원문</div><p>{removeInstagramCounts(selected.caption) || '저장된 글이 없습니다.'}</p></div>
                 <a className="source-link" href={selected.original_url} target="_blank" rel="noopener noreferrer">인스타그램 원본 보기 ↗</a>
                 <div className="action-row"><button className="small-primary" onClick={() => setEditing(true)}>수정</button><button className="small-outline danger-button" onClick={() => deleteRecipe(selected)}>삭제</button></div>
               </>}
@@ -364,7 +375,7 @@ export default function App() {
           </section> : <>
             <input className="search-input" aria-label="레시피 검색" placeholder="레시피 이름이나 글 내용 검색" value={search} onChange={event => setSearch(event.target.value)} />
             <div className="filter-row">{['전체', ...CATEGORIES].map(category => <button key={category} className={filter === category ? 'selected' : ''} onClick={() => setFilter(category)}>{category}</button>)}</div>
-            {loadingRecipes ? <p className="empty-state">레시피를 불러오는 중이에요…</p> : filteredRecipes.length === 0 ? <div className="empty-state"><span aria-hidden="true">▤</span><h3>{recipes.length ? '검색 결과 없음' : '저장된 레시피 없음'}</h3></div> : <div className="recipe-grid">{filteredRecipes.map(recipe => <button className="recipe-card" key={recipe.id} onClick={() => openRecipe(recipe)}><Cover src={recipe.displayImage} /><span className="recipe-card-body"><strong>{recipe.title}</strong><span>{recipe.category} · {new Date(recipe.created_at).toLocaleDateString('ko-KR')}</span></span></button>)}</div>}
+            {loadingRecipes ? <p className="empty-state">레시피를 불러오는 중이에요…</p> : filteredRecipes.length === 0 ? <div className="empty-state"><span aria-hidden="true">▤</span><h3>{recipes.length ? '검색 결과 없음' : '저장된 레시피 없음'}</h3></div> : <div className="recipe-grid">{filteredRecipes.map(recipe => <button className="recipe-card" key={recipe.id} onClick={() => openRecipe(recipe)}><Cover src={recipe.displayImage} /><span className="recipe-card-body"><strong>{removeInstagramCounts(recipe.title)}</strong><span>{recipe.category} · {new Date(recipe.created_at).toLocaleDateString('ko-KR')}</span></span></button>)}</div>}
           </>}
         </>}
       </main>}
