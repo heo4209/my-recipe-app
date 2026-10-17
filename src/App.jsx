@@ -16,6 +16,17 @@ function normalizeLink(text) {
   }
 }
 
+// The Android OS sends URL/text/title query parameters to /share.
+// Read them from the share landing page only, and keep the original URL out of storage until reviewed.
+function sharedInstagramUrl() {
+  if (window.location.pathname !== '/share') return null;
+  const params = new URLSearchParams(window.location.search);
+  return normalizeLink(
+    [params.get('url'), params.get('text'), params.get('title')]
+      .filter(Boolean).join(' ')
+  );
+}
+
 function Cover({ src, alt = '레시피 사진', className = '' }) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [src]);
@@ -113,6 +124,21 @@ export default function App() {
     else { setRecipes([]); setSelectedId(null); }
   }, [user?.id]);
 
+  // An installed Android PWA can receive a post from Instagram Share -> More.
+  // If signed out, keep /share query intact until login completes; never auto-save unreviewed content.
+  useEffect(() => {
+    if (!user?.id || window.location.pathname !== '/share') return;
+    const link = sharedInstagramUrl();
+    window.history.replaceState(window.history.state, '', '/');
+    setActiveTab('add');
+    if (!link) {
+      setError('공유된 인스타그램 게시물 주소를 찾지 못했어요. 일반 공개 게시물 링크를 공유해 주세요.');
+      return;
+    }
+    setInput(link);
+    void extractFromUrl(link);
+  }, [user?.id]);
+
   async function loadRecipes(ownerId) {
     setLoadingRecipes(true);
     try {
@@ -133,10 +159,8 @@ export default function App() {
     }
   }
 
-  async function extract(event) {
-    event.preventDefault();
+  async function extractFromUrl(url) {
     setNotice(''); setError('');
-    const url = normalizeLink(input);
     if (!url) { setError('instagram.com/p/... 또는 instagram.com/reel/... 링크를 입력해 주세요.'); return; }
     setExtracting(true);
     setResult(null);
@@ -154,6 +178,11 @@ export default function App() {
     } finally {
       setExtracting(false);
     }
+  }
+
+  function extract(event) {
+    event.preventDefault();
+    void extractFromUrl(normalizeLink(input));
   }
 
   async function uploadManualPhoto(recipeId) {
