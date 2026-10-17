@@ -1,14 +1,14 @@
 {
   "id": "/",
-  "name": "나의 레시피 보관함",
-  "short_name": "레시피 보관함",
-  "description": "인스타그램 게시글을 내 레시피 보관함에 저장합니다.",
+  "name": "레시피 아카이브",
+  "short_name": "레시피 노트",
+  "description": "인스타그램 게시글을 내 레시피 노트에 저장합니다.",
   "lang": "ko",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#faf9f6",
-  "theme_color": "#558268",
+  "background_color": "#f6f6f6",
+  "theme_color": "#f6f6f6",
   "icons": [
     {
       "src": "/icons/icon-192.png",

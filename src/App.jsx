@@ -31,7 +31,7 @@ function Cover({ src, alt = '레시피 사진', className = '' }) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [src]);
   if (!src || failed) {
-    return <div className={`image-fallback ${className}`}><span aria-hidden="true">🍳</span><small>사진 없음</small></div>;
+    return <div className={`image-fallback ${className}`}><span aria-hidden="true">▤</span><small>사진 없음</small></div>;
   }
   return <img className={`result-image ${className}`} src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} />;
 }
@@ -67,9 +67,9 @@ function AuthScreen({ onMessage }) {
   }
 
   return <main className="auth-container">
-    <div className="hero"><div className="eyebrow">MY LITTLE RECIPE BOX</div><h1>나만의 레시피<br /><em>보관함.</em></h1><p>인스타그램에서 가져온 게시글을 내 계정에 안전하게 저장해요.</p></div>
+    <div className="hero auth-hero"><div className="eyebrow">PERSONAL ARCHIVE</div><h1>레시피 아카이브</h1></div>
     <section className="form-card auth-card">
-      <div className="section-kicker">PRIVATE COLLECTION</div>
+      <div className="section-kicker">ACCOUNT</div>
       <h2>{register ? '처음 사용할 계정 만들기' : '로그인'}</h2>
       <form onSubmit={submit}>
         <label htmlFor="email">이메일</label>
@@ -80,7 +80,7 @@ function AuthScreen({ onMessage }) {
       </form>
       {error && <p className="alert" role="alert">{error}</p>}
       <button className="text-button" type="button" onClick={() => { setRegister(!register); setError(''); }}>{register ? '이미 계정이 있어요 · 로그인' : '처음이라면 계정 만들기'}</button>
-      <p className="fine-print">혼자 사용하는 앱이어도 비밀번호를 사용하고, 저장된 데이터는 계정별로 분리돼요.</p>
+
     </section>
   </main>;
 }
@@ -299,8 +299,8 @@ export default function App() {
 
   return <div className="page">
     <header className="topbar">
-      <div className="brand"><div className="brand-icon">🍊</div><div>나의 레시피<span className="brand-sub">RECIPE ARCHIVE</span></div></div>
-      {user ? <button className="text-button header-action" onClick={() => supabase.auth.signOut()}>로그아웃</button> : <span className="test-pill">PRIVATE RECIPE BOX</span>}
+      <div className="brand"><span className="brand-icon" aria-hidden="true">▤</span><div>레시피 아카이브<span className="brand-sub">ARCHIVE NOTE</span></div></div>
+      {user ? <button className="text-button header-action" onClick={() => supabase.auth.signOut()}>로그아웃</button> : <span className="test-pill">PRIVATE</span>}
     </header>
 
     {!supabase ? <main><section className="form-card config-card"><h2>Supabase 설정이 필요해요</h2><p>Vercel 프로젝트 환경 변수에 다음 두 값을 추가하고 재배포해 주세요.</p><code>VITE_SUPABASE_URL</code><code>VITE_SUPABASE_PUBLISHABLE_KEY</code><p>주의: secret / service_role 키는 입력하지 마세요.</p></section></main>
@@ -308,19 +308,19 @@ export default function App() {
       : !user ? <><AuthScreen onMessage={setNotice} />{notice && <div className="floating-notice" role="status">{notice}</div>}</>
       : <main>
         <nav className="tabs" aria-label="메뉴">
-          <button className={activeTab === 'add' ? 'active' : ''} onClick={() => { setActiveTab('add'); setSelectedId(null); setError(''); }}>＋ 새 레시피</button>
-          <button className={activeTab === 'library' ? 'active' : ''} onClick={() => { setActiveTab('library'); setError(''); }}>▦ 내 보관함 ({recipes.length})</button>
+          <button className={activeTab === 'add' ? 'active' : ''} onClick={() => { setActiveTab('add'); setSelectedId(null); setError(''); }}>＋ 추가</button>
+          <button className={activeTab === 'library' ? 'active' : ''} onClick={() => { setActiveTab('library'); setError(''); }}>보관함 ({recipes.length})</button>
         </nav>
         {notice && <div className="success-notice" role="status">{notice}</div>}
         {error && <div className="alert" role="alert">{error}</div>}
 
         {activeTab === 'add' ? <>
-          <section className="hero"><div className="eyebrow">SAVE WHAT YOU LOVE</div><h1>맛있는 순간을<br /><em>잊지 않도록.</em></h1><p>인스타그램 링크에서 가져온 글을 확인하고 내 보관함에 저장하세요.</p></section>
+          <section className="hero compact-hero"><h1>새 레시피</h1></section>
           <section className="form-card">
-            <div className="section-heading"><div><span className="section-kicker">STEP 01</span><h2>레시피 가져오기</h2></div><div className="round-decoration">↗</div></div>
+            <div className="section-heading"><h2>링크 가져오기</h2></div>
             <form onSubmit={extract}>
               <label htmlFor="link">게시물 또는 릴스 링크</label>
-              <div className="input-wrap"><span aria-hidden="true">🔗</span><input id="link" value={input} onChange={event => setInput(event.target.value)} placeholder="https://www.instagram.com/p/..." autoComplete="off" /></div>
+              <div className="input-wrap"><span className="link-mark" aria-hidden="true">↗</span><input id="link" value={input} onChange={event => setInput(event.target.value)} placeholder="https://www.instagram.com/p/..." autoComplete="off" /></div>
               <button type="submit" disabled={extracting}>{extracting ? '게시물 가져오는 중…' : '썸네일과 글 가져오기 →'}</button>
             </form>
           </section>
@@ -342,9 +342,9 @@ export default function App() {
               <button className="primary-button" type="button" disabled={saving} onClick={save}>{saving ? '저장 중…' : '내 보관함에 저장하기 →'}</button>
             </div>
           </section>}
-          <section className="info-card"><div className="info-icon">✳</div><div><h3>외부 유료 API 없이 저장해요</h3><p>캡션은 원문 후보를 있는 그대로 저장해요. 게시물마다 추출 품질은 달라질 수 있으니 확인한 뒤 저장하세요.</p></div></section>
+          
         </> : <>
-          <section className="library-heading"><div className="eyebrow">MY COLLECTION</div><h1>내 레시피 보관함</h1><p>저장한 레시피 {recipes.length}개</p></section>
+          <section className="library-heading"><h1>보관함</h1><p>전체 {recipes.length}개</p></section>
           {selected ? <section className="results detail-card">
             <button className="text-button back-button" onClick={() => { setSelectedId(null); setEditing(false); }}>← 목록으로</button>
             <Cover src={selected.displayImage} />
@@ -364,10 +364,10 @@ export default function App() {
           </section> : <>
             <input className="search-input" aria-label="레시피 검색" placeholder="레시피 이름이나 글 내용 검색" value={search} onChange={event => setSearch(event.target.value)} />
             <div className="filter-row">{['전체', ...CATEGORIES].map(category => <button key={category} className={filter === category ? 'selected' : ''} onClick={() => setFilter(category)}>{category}</button>)}</div>
-            {loadingRecipes ? <p className="empty-state">레시피를 불러오는 중이에요…</p> : filteredRecipes.length === 0 ? <div className="empty-state"><span>🍽️</span><h3>{recipes.length ? '검색 결과가 없어요' : '아직 저장한 레시피가 없어요'}</h3><p>새 레시피에서 인스타그램 링크를 가져와 저장해 보세요.</p></div> : <div className="recipe-grid">{filteredRecipes.map(recipe => <button className="recipe-card" key={recipe.id} onClick={() => openRecipe(recipe)}><Cover src={recipe.displayImage} /><span className="recipe-card-body"><strong>{recipe.title}</strong><span>{recipe.category} · {new Date(recipe.created_at).toLocaleDateString('ko-KR')}</span></span></button>)}</div>}
+            {loadingRecipes ? <p className="empty-state">레시피를 불러오는 중이에요…</p> : filteredRecipes.length === 0 ? <div className="empty-state"><span aria-hidden="true">▤</span><h3>{recipes.length ? '검색 결과 없음' : '저장된 레시피 없음'}</h3></div> : <div className="recipe-grid">{filteredRecipes.map(recipe => <button className="recipe-card" key={recipe.id} onClick={() => openRecipe(recipe)}><Cover src={recipe.displayImage} /><span className="recipe-card-body"><strong>{recipe.title}</strong><span>{recipe.category} · {new Date(recipe.created_at).toLocaleDateString('ko-KR')}</span></span></button>)}</div>}
           </>}
         </>}
       </main>}
-    <footer>개인용 레시피 프로젝트 · 외부 유료 API 없음</footer>
+    <footer>RECIPE ARCHIVE</footer>
   </div>;
 }

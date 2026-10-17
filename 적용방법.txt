@@ -1,0 +1,33 @@
+레시피 아카이브 · 무채색 디자인 업데이트
+
+기존 GitHub 저장소: heo4209/my-recipe-app
+기준: 2026-10-17에 확인한 정상 작동 소스
+
+수정된 파일 7개:
+  src/App.jsx                      화면 문구 정리 (로직 유지)
+  src/styles.css                   무채색 아카이브 노트 UI
+  index.html                       브라우저 제목 / 테마 색
+  public/manifest.webmanifest      앱 이름 / 설치 테마 색
+  public/icons/icon-192.png       새 무채색 앱 아이콘
+  public/icons/icon-512.png       새 무채색 앱 아이콘
+  public/icons/icon-maskable-512.png
+
+업데이트 방법
+1. ZIP 압축을 푼다.
+2. GitHub > my-recipe-app > Add file > Upload files를 연다.
+3. 이 압축 파일 안의 src, public 폴더와 index.html 파일을 저장소 최상단에 업로드한다.
+   기존 동일 경로의 파일은 교체한다. 파일명과 경로는 유지한다.
+4. Commit changes를 누른다.
+5. Vercel의 자동 배포가 Ready가 될 때까지 기다린다.
+6. 앱 새로고침 후 확인한다. 홈 화면 아이콘은 캐시 때문에 갱신이 늦을 수 있다.
+
+수정하지 않는 것
+  api/scrape.js / api/save-image.js
+  src/lib/supabase.js
+  src/main.jsx / public/sw.js
+  Supabase SQL, Vercel 환경 변수
+
+로그인, 회원가입, 자동 로그인, 인스타그램 공유 받기, 썸네일/본문 추출,
+Supabase 저장 및 보관함 기능을 수정하지 않았다.
+
+주의: 기존 레시피 데이터는 Supabase에 있으므로, 디자인 파일 교체만으로 삭제되지 않는다.
