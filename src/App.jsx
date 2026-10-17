@@ -1,90 +1,344 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { supabase } from './lib/supabase.js';
+
+const CATEGORIES = ['미분류', '한식', '양식', '일식', '중식', '디저트', '기타'];
 
 function normalizeLink(text) {
-  const match = text.trim().match(/https:\/\/[^\s]+/i);
+  const match = (text || '').trim().match(/https:\/\/[^\s]+/i);
   if (!match) return null;
   try {
     const url = new URL(match[0]);
     if (!['instagram.com', 'www.instagram.com', 'm.instagram.com'].includes(url.hostname)) return null;
-    if (!/^\/(p|reel)\/[A-Za-z0-9_-]+\/?$/.test(url.pathname)) return null;
-    return url.toString();
+    const post = url.pathname.match(/^\/(p|reel)\/([a-zA-Z0-9_-]+)\/?$/);
+    return post ? `https://www.instagram.com/${post[1]}/${post[2]}/` : null;
   } catch {
     return null;
   }
 }
 
-function ResultImage({ src }) {
-  const [error, setError] = useState(false);
-  if (!src || error) {
-    return <div className="image-fallback"><span aria-hidden="true">🍳</span><p>이미지를 가져오지 못했어요</p></div>;
+function Cover({ src, alt = '레시피 사진', className = '' }) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [src]);
+  if (!src || failed) {
+    return <div className={`image-fallback ${className}`}><span aria-hidden="true">🍳</span><small>사진 없음</small></div>;
   }
-  return <img className="result-image" src={src} alt="게시물 미리보기" onError={() => setError(true)} />;
+  return <img className={`result-image ${className}`} src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} />;
+}
+
+function AuthScreen({ onMessage }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [register, setRegister] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit(event) {
+    event.preventDefault();
+    setPending(true);
+    setError('');
+    try {
+      const credentials = { email: email.trim(), password };
+      const { data, error: authError } = register
+        ? await supabase.auth.signUp(credentials)
+        : await supabase.auth.signInWithPassword(credentials);
+      if (authError) throw authError;
+      if (register && !data?.session) {
+        onMessage('가입 요청을 완료했어요. 메일 인증 설정이 켜져 있다면 이메일을 확인한 다음 로그인해 주세요.');
+        setRegister(false);
+      } else if (register) {
+        onMessage('계정을 만들었어요. 이제 내 보관함에 저장할 수 있어요.');
+      }
+    } catch (err) {
+      setError(err.message || '계정을 확인하지 못했어요.');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return <main className="auth-container">
+    <div className="hero"><div className="eyebrow">MY LITTLE RECIPE BOX</div><h1>나만의 레시피<br /><em>보관함.</em></h1><p>인스타그램에서 가져온 게시글을 내 계정에 안전하게 저장해요.</p></div>
+    <section className="form-card auth-card">
+      <div className="section-kicker">PRIVATE COLLECTION</div>
+      <h2>{register ? '처음 사용할 계정 만들기' : '로그인'}</h2>
+      <form onSubmit={submit}>
+        <label htmlFor="email">이메일</label>
+        <div className="input-wrap"><input id="email" type="email" required autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="you@example.com" /></div>
+        <label htmlFor="password" className="field-top">비밀번호</label>
+        <div className="input-wrap"><input id="password" type="password" minLength="6" required autoComplete={register ? 'new-password' : 'current-password'} value={password} onChange={event => setPassword(event.target.value)} placeholder="6자 이상" /></div>
+        <button type="submit" disabled={pending}>{pending ? '처리 중…' : register ? '계정 만들기' : '로그인'} →</button>
+      </form>
+      {error && <p className="alert" role="alert">{error}</p>}
+      <button className="text-button" type="button" onClick={() => { setRegister(!register); setError(''); }}>{register ? '이미 계정이 있어요 · 로그인' : '처음이라면 계정 만들기'}</button>
+      <p className="fine-print">혼자 사용하는 앱이어도 비밀번호를 사용하고, 저장된 데이터는 계정별로 분리돼요.</p>
+    </section>
+  </main>;
 }
 
 export default function App() {
+  const [user, setUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [activeTab, setActiveTab] = useState('add');
   const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [result, setResult] = useState(null);
+  const [draftTitle, setDraftTitle] = useState('');
+  const [draftCaption, setDraftCaption] = useState('');
+  const [draftCategory, setDraftCategory] = useState('미분류');
+  const [imageFile, setImageFile] = useState(null);
+  const [recipes, setRecipes] = useState([]);
+  const [loadingRecipes, setLoadingRecipes] = useState(false);
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState('전체');
+  const [selectedId, setSelectedId] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editCaption, setEditCaption] = useState('');
+  const [editCategory, setEditCategory] = useState('미분류');
+  const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
 
-  async function handleSubmit(event) {
-    event.preventDefault();
-    const url = normalizeLink(input);
-    if (!url) {
-      setError('instagram.com/p/... 또는 instagram.com/reel/... 주소를 입력해 주세요.');
-      setResult(null);
-      return;
+  useEffect(() => {
+    if (!supabase) { setAuthReady(true); return; }
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(data.session?.user ?? null);
+      setAuthReady(true);
+    }).catch(() => setAuthReady(true));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null));
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (user?.id) loadRecipes(user.id);
+    else { setRecipes([]); setSelectedId(null); }
+  }, [user?.id]);
+
+  async function loadRecipes(ownerId) {
+    setLoadingRecipes(true);
+    try {
+      const { data, error: dbError } = await supabase.from('recipes').select('*')
+        .eq('user_id', ownerId).order('created_at', { ascending: false });
+      if (dbError) throw dbError;
+      const withImages = await Promise.all((data || []).map(async recipe => {
+        if (!recipe.image_path) return { ...recipe, displayImage: recipe.image_url };
+        const { data: signed, error: signedError } = await supabase.storage
+          .from('recipe-images').createSignedUrl(recipe.image_path, 3600);
+        return { ...recipe, displayImage: signedError ? recipe.image_url : signed?.signedUrl || recipe.image_url };
+      }));
+      setRecipes(withImages);
+    } catch (err) {
+      setError(`저장된 레시피를 불러오지 못했어요: ${err.message}`);
+    } finally {
+      setLoadingRecipes(false);
     }
-    setLoading(true);
-    setError('');
+  }
+
+  async function extract(event) {
+    event.preventDefault();
+    setNotice(''); setError('');
+    const url = normalizeLink(input);
+    if (!url) { setError('instagram.com/p/... 또는 instagram.com/reel/... 링크를 입력해 주세요.'); return; }
+    setExtracting(true);
     setResult(null);
     try {
       const response = await fetch(`/api/scrape?url=${encodeURIComponent(url)}`, { cache: 'no-store' });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || '페이지를 가져올 수 없습니다.');
+      if (!response.ok) throw new Error(data.error || '게시물을 가져올 수 없어요.');
       setResult(data);
+      setDraftTitle(data.title || '나의 레시피');
+      setDraftCaption(data.captionCandidate || data.preview || '');
+      setDraftCategory('미분류');
+      setImageFile(null);
     } catch (err) {
-      setError(err.message || '네트워크 오류가 발생했어요.');
+      setError(err.message || '추출 중 오류가 발생했어요.');
     } finally {
-      setLoading(false);
+      setExtracting(false);
     }
   }
 
-  return (
-    <div className="page">
-      <header className="topbar">
-        <div className="brand"><div className="brand-icon">🍊</div><div>나의 레시피<span className="brand-sub">RECIPE ARCHIVE</span></div></div>
-        <span className="test-pill">1단계 · 추출 테스트</span>
-      </header>
-      <main>
-        <section className="hero">
-          <div className="eyebrow">MY LITTLE RECIPE BOX</div>
-          <h1>맛있는 순간을<br /><em>잊지 않도록.</em></h1>
-          <p>인스타그램에서 발견한 레시피, 링크 하나로 어디까지 가져올 수 있는지 먼저 확인해 봐요.</p>
-        </section>
-        <section className="form-card">
-          <div className="section-heading"><div><span className="section-kicker">STEP 01</span><h2>인스타그램 링크 테스트</h2></div><div className="round-decoration">↗</div></div>
-          <form onSubmit={handleSubmit}>
-            <label htmlFor="link">게시물 또는 릴스 링크</label>
-            <div className="input-wrap"><span aria-hidden="true">🔗</span><input id="link" value={input} onChange={e => setInput(e.target.value)} placeholder="https://www.instagram.com/p/..." autoComplete="off" /></div>
-            <button type="submit" disabled={loading}>{loading ? '공개 게시물 확인 중…' : '썸네일과 글 가져오기'} <span aria-hidden="true">→</span></button>
-          </form>
-          {error && <div className="alert" role="alert"><strong>추출에 실패했어요.</strong><p>{error}</p><p>공개 게시물이라도 인스타그램이 자동 접근을 제한할 수 있어요.</p></div>}
-        </section>
-        {result && <section className="results" aria-live="polite">
-          <div className="result-title"><span>추출 결과</span><span className="status-pill">확인 필요</span></div>
-          <ResultImage key={result.url} src={result.image} />
-          <div className="result-content">
-            <h2>{result.title || '게시물 제목을 찾지 못했어요'}</h2>
-            <div className="caption-block"><span className="field-title">본문 후보 · 구조화 데이터</span><p>{result.captionCandidate || '본문 후보를 찾지 못했어요. 웹사이트가 원문을 제공하지 않을 수 있어요.'}</p></div>
-            <div className="caption-block pale"><span className="field-title">게시물 미리보기 설명 (원문 전체 아님)</span><p>{result.preview || '미리보기 설명이 없어요.'}</p></div>
-            <p className="disclaimer">※ 글이 일부만 보이거나 이미지가 뜨지 않을 수 있어요. 이 버전은 데이터 추출 시험용이며 아직 저장 기능은 없어요.</p>
-            <a className="source-link" href={result.url} target="_blank" rel="noopener noreferrer">인스타그램 원본 열기 ↗</a>
-          </div>
-        </section>}
-        <section className="info-card"><div className="info-icon">✳</div><div><h3>이번 단계에서는 저장하지 않아요</h3><p>먼저 공개 게시물의 사진과 글이 실제로 얼마나 잘 추출되는지 테스트합니다. 성공률을 확인한 다음, Supabase 저장과 안드로이드 공유 기능을 추가할 거예요.</p></div></section>
-      </main>
-      <footer>개인용 레시피 프로젝트 · 외부 유료 API 없음</footer>
-    </div>
-  );
+  async function uploadManualPhoto(recipeId) {
+    if (!imageFile) return;
+    if (imageFile.size > 6 * 1024 * 1024) throw new Error('사진 용량은 6MB 이하여야 해요.');
+    const types = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+    const ext = types[imageFile.type];
+    if (!ext) throw new Error('JPG, PNG, WEBP 사진만 지원해요.');
+    const path = `${user.id}/${recipeId}-${crypto.randomUUID()}.${ext}`;
+    const { error: uploadError } = await supabase.storage.from('recipe-images')
+      .upload(path, imageFile, { contentType: imageFile.type, upsert: false });
+    if (uploadError) throw uploadError;
+    const { error: updateError } = await supabase.from('recipes').update({ image_path: path }).eq('id', recipeId);
+    if (updateError) {
+      await supabase.storage.from('recipe-images').remove([path]);
+      throw updateError;
+    }
+  }
+
+  async function save() {
+    if (!result?.url || !user) return;
+    if (!draftTitle.trim()) { setError('레시피 제목을 입력해 주세요.'); return; }
+    setSaving(true); setError(''); setNotice('');
+    let inserted = null;
+    try {
+      const payload = {
+        user_id: user.id,
+        original_url: normalizeLink(result.url),
+        title: draftTitle.trim(),
+        caption: draftCaption,
+        image_url: result.image || null,
+        category: draftCategory,
+      };
+      const { data, error: dbError } = await supabase.from('recipes').insert(payload).select().single();
+      if (dbError) {
+        if (dbError.code === '23505') throw new Error('이미 저장한 게시물이에요. 내 보관함에서 확인해 주세요.');
+        throw dbError;
+      }
+      inserted = data;
+      try {
+        if (imageFile) {
+          await uploadManualPhoto(data.id);
+        } else if (data.image_url) {
+          const { data: sessionInfo } = await supabase.auth.getSession();
+          const token = sessionInfo.session?.access_token;
+          if (token) {
+            const response = await fetch('/api/save-image', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({ recipeId: data.id }),
+            });
+            if (!response.ok) {
+              const imageError = await response.json().catch(() => ({}));
+              throw new Error(imageError.error || '썸네일 이미지 복사 실패');
+            }
+          }
+        }
+        setNotice('레시피와 사진을 저장했어요!');
+      } catch (imageError) {
+        setNotice('글과 링크는 저장했어요. 사진은 원본 주소로 표시하며 영구 보관되지 않을 수 있어요. ' + imageError.message);
+      }
+      setResult(null); setInput(''); setImageFile(null);
+      await loadRecipes(user.id);
+      setActiveTab('library');
+    } catch (err) {
+      setError(err.message || '저장하지 못했어요.');
+      if (inserted) await loadRecipes(user.id);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const filteredRecipes = useMemo(() => recipes.filter(recipe =>
+    (filter === '전체' || recipe.category === filter) &&
+    `${recipe.title} ${recipe.caption}`.toLowerCase().includes(search.trim().toLowerCase())
+  ), [recipes, search, filter]);
+  const selected = recipes.find(recipe => recipe.id === selectedId);
+
+  function openRecipe(recipe) {
+    setSelectedId(recipe.id); setEditing(false);
+    setEditTitle(recipe.title); setEditCaption(recipe.caption); setEditCategory(recipe.category);
+    setNotice(''); setError('');
+  }
+
+  async function updateRecipe() {
+    if (!selected) return;
+    if (!editTitle.trim()) { setError('제목을 입력해 주세요.'); return; }
+    setSaving(true); setError('');
+    try {
+      const { error: dbError } = await supabase.from('recipes').update({
+        title: editTitle.trim(), caption: editCaption, category: editCategory,
+      }).eq('id', selected.id);
+      if (dbError) throw dbError;
+      await loadRecipes(user.id);
+      setEditing(false); setNotice('레시피를 수정했어요.');
+    } catch (err) { setError(err.message); }
+    finally { setSaving(false); }
+  }
+
+  async function deleteRecipe(recipe) {
+    if (!window.confirm(`“${recipe.title}” 레시피를 삭제할까요?`)) return;
+    setError('');
+    try {
+      const { error: dbError } = await supabase.from('recipes').delete().eq('id', recipe.id);
+      if (dbError) throw dbError;
+      if (recipe.image_path) {
+        await supabase.storage.from('recipe-images').remove([recipe.image_path]);
+      }
+      setSelectedId(null); setEditing(false);
+      await loadRecipes(user.id);
+      setNotice('레시피를 삭제했어요.');
+    } catch (err) { setError(err.message); }
+  }
+
+  return <div className="page">
+    <header className="topbar">
+      <div className="brand"><div className="brand-icon">🍊</div><div>나의 레시피<span className="brand-sub">RECIPE ARCHIVE</span></div></div>
+      {user ? <button className="text-button header-action" onClick={() => supabase.auth.signOut()}>로그아웃</button> : <span className="test-pill">PRIVATE RECIPE BOX</span>}
+    </header>
+
+    {!supabase ? <main><section className="form-card config-card"><h2>Supabase 설정이 필요해요</h2><p>Vercel 프로젝트 환경 변수에 다음 두 값을 추가하고 재배포해 주세요.</p><code>VITE_SUPABASE_URL</code><code>VITE_SUPABASE_PUBLISHABLE_KEY</code><p>주의: secret / service_role 키는 입력하지 마세요.</p></section></main>
+      : !authReady ? <main className="center-message">계정을 확인하고 있어요…</main>
+      : !user ? <><AuthScreen onMessage={setNotice} />{notice && <div className="floating-notice" role="status">{notice}</div>}</>
+      : <main>
+        <nav className="tabs" aria-label="메뉴">
+          <button className={activeTab === 'add' ? 'active' : ''} onClick={() => { setActiveTab('add'); setSelectedId(null); setError(''); }}>＋ 새 레시피</button>
+          <button className={activeTab === 'library' ? 'active' : ''} onClick={() => { setActiveTab('library'); setError(''); }}>▦ 내 보관함 ({recipes.length})</button>
+        </nav>
+        {notice && <div className="success-notice" role="status">{notice}</div>}
+        {error && <div className="alert" role="alert">{error}</div>}
+
+        {activeTab === 'add' ? <>
+          <section className="hero"><div className="eyebrow">SAVE WHAT YOU LOVE</div><h1>맛있는 순간을<br /><em>잊지 않도록.</em></h1><p>인스타그램 링크에서 가져온 글을 확인하고 내 보관함에 저장하세요.</p></section>
+          <section className="form-card">
+            <div className="section-heading"><div><span className="section-kicker">STEP 01</span><h2>레시피 가져오기</h2></div><div className="round-decoration">↗</div></div>
+            <form onSubmit={extract}>
+              <label htmlFor="link">게시물 또는 릴스 링크</label>
+              <div className="input-wrap"><span aria-hidden="true">🔗</span><input id="link" value={input} onChange={event => setInput(event.target.value)} placeholder="https://www.instagram.com/p/..." autoComplete="off" /></div>
+              <button type="submit" disabled={extracting}>{extracting ? '게시물 가져오는 중…' : '썸네일과 글 가져오기 →'}</button>
+            </form>
+          </section>
+          {result && <section className="results">
+            <div className="result-title"><span>저장할 내용 확인</span><span className="status-pill">수정 가능</span></div>
+            <Cover src={result.image} />
+            <div className="result-content">
+              <label htmlFor="title">제목</label>
+              <input className="edit-input" id="title" value={draftTitle} onChange={event => setDraftTitle(event.target.value)} />
+              <label className="field-top" htmlFor="caption">게시글 본문</label>
+              <textarea id="caption" rows="10" value={draftCaption} onChange={event => setDraftCaption(event.target.value)} placeholder="게시글 본문을 입력해 주세요" />
+              {!result.captionCandidate && result.preview && <p className="caution">현재 글은 미리보기 설명에서 가져온 내용이므로 원문 전체가 아닐 수 있어요. 저장 전에 확인해 주세요.</p>}
+              <label htmlFor="category" className="field-top">카테고리</label>
+              <select id="category" value={draftCategory} onChange={event => setDraftCategory(event.target.value)}>{CATEGORIES.map(category => <option key={category}>{category}</option>)}</select>
+              <label htmlFor="photo" className="field-top">사진 직접 추가 (선택)</label>
+              <input id="photo" className="photo-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={event => setImageFile(event.target.files?.[0] || null)} />
+              <p className="fine-print">사진은 자동 보관을 시도해요. 실패하더라도 원문과 링크는 저장돼요. 직접 사진을 선택하면 그 파일을 저장해요.</p>
+              <a className="source-link" href={result.url} target="_blank" rel="noopener noreferrer">인스타그램 원본 확인 ↗</a>
+              <button className="primary-button" type="button" disabled={saving} onClick={save}>{saving ? '저장 중…' : '내 보관함에 저장하기 →'}</button>
+            </div>
+          </section>}
+          <section className="info-card"><div className="info-icon">✳</div><div><h3>외부 유료 API 없이 저장해요</h3><p>캡션은 원문 후보를 있는 그대로 저장해요. 게시물마다 추출 품질은 달라질 수 있으니 확인한 뒤 저장하세요.</p></div></section>
+        </> : <>
+          <section className="library-heading"><div className="eyebrow">MY COLLECTION</div><h1>내 레시피 보관함</h1><p>저장한 레시피 {recipes.length}개</p></section>
+          {selected ? <section className="results detail-card">
+            <button className="text-button back-button" onClick={() => { setSelectedId(null); setEditing(false); }}>← 목록으로</button>
+            <Cover src={selected.displayImage} />
+            <div className="result-content">
+              {editing ? <>
+                <label htmlFor="edit-title">제목</label><input id="edit-title" className="edit-input" value={editTitle} onChange={event => setEditTitle(event.target.value)} />
+                <label htmlFor="edit-caption" className="field-top">게시글 본문</label><textarea id="edit-caption" rows="12" value={editCaption} onChange={event => setEditCaption(event.target.value)} />
+                <label htmlFor="edit-category" className="field-top">카테고리</label><select id="edit-category" value={editCategory} onChange={event => setEditCategory(event.target.value)}>{CATEGORIES.map(category => <option key={category}>{category}</option>)}</select>
+                <div className="action-row"><button className="small-primary" onClick={updateRecipe} disabled={saving}>수정 저장</button><button className="small-outline" onClick={() => setEditing(false)}>취소</button></div>
+              </> : <>
+                <span className="category-tag">{selected.category}</span><h2>{selected.title}</h2>
+                <div className="caption-block"><div className="field-title">게시글 원문</div><p>{selected.caption || '저장된 글이 없습니다.'}</p></div>
+                <a className="source-link" href={selected.original_url} target="_blank" rel="noopener noreferrer">인스타그램 원본 보기 ↗</a>
+                <div className="action-row"><button className="small-primary" onClick={() => setEditing(true)}>수정</button><button className="small-outline danger-button" onClick={() => deleteRecipe(selected)}>삭제</button></div>
+              </>}
+            </div>
+          </section> : <>
+            <input className="search-input" aria-label="레시피 검색" placeholder="레시피 이름이나 글 내용 검색" value={search} onChange={event => setSearch(event.target.value)} />
+            <div className="filter-row">{['전체', ...CATEGORIES].map(category => <button key={category} className={filter === category ? 'selected' : ''} onClick={() => setFilter(category)}>{category}</button>)}</div>
+            {loadingRecipes ? <p className="empty-state">레시피를 불러오는 중이에요…</p> : filteredRecipes.length === 0 ? <div className="empty-state"><span>🍽️</span><h3>{recipes.length ? '검색 결과가 없어요' : '아직 저장한 레시피가 없어요'}</h3><p>새 레시피에서 인스타그램 링크를 가져와 저장해 보세요.</p></div> : <div className="recipe-grid">{filteredRecipes.map(recipe => <button className="recipe-card" key={recipe.id} onClick={() => openRecipe(recipe)}><Cover src={recipe.displayImage} /><span className="recipe-card-body"><strong>{recipe.title}</strong><span>{recipe.category} · {new Date(recipe.created_at).toLocaleDateString('ko-KR')}</span></span></button>)}</div>}
+          </>}
+        </>}
+      </main>}
+    <footer>개인용 레시피 프로젝트 · 외부 유료 API 없음</footer>
+  </div>;
 }
