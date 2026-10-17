@@ -3,6 +3,30 @@ import { supabase } from './lib/supabase.js';
 
 const CATEGORIES = ['미분류', '한식', '양식', '일식', '중식', '디저트', '기타'];
 
+// Touch-friendly, single-tap category choices. "미분류" is the default.
+function CategoryPicker({ value, onChange }) {
+  return (
+    <fieldset className="category-fieldset">
+      <legend>카테고리</legend>
+      <div className="category-picker" aria-label="레시피 카테고리 선택">
+        {CATEGORIES.map((category) => (
+          <button
+            key={category}
+            type="button"
+            className={`category-option${value === category ? ' is-selected' : ''}`}
+            aria-pressed={value === category}
+            onClick={() => onChange(category)}
+          >
+            <span>{category}</span>
+            {value === category && <span className="category-check" aria-hidden="true">✓</span>}
+          </button>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+
 
 // Instagram preview metadata can prepend "2 likes, 3 comments -".
 // Strip only that social-count label; leave the Instagram username and caption intact.
@@ -344,8 +368,7 @@ export default function App() {
               <label className="field-top" htmlFor="caption">게시글 본문</label>
               <textarea id="caption" rows="10" value={draftCaption} onChange={event => setDraftCaption(event.target.value)} placeholder="게시글 본문을 입력해 주세요" />
               {!result.captionCandidate && result.preview && <p className="caution">현재 글은 미리보기 설명에서 가져온 내용이므로 원문 전체가 아닐 수 있어요. 저장 전에 확인해 주세요.</p>}
-              <label htmlFor="category" className="field-top">카테고리</label>
-              <select id="category" value={draftCategory} onChange={event => setDraftCategory(event.target.value)}>{CATEGORIES.map(category => <option key={category}>{category}</option>)}</select>
+              <CategoryPicker value={draftCategory} onChange={setDraftCategory} />
               <label htmlFor="photo" className="field-top">사진 직접 추가 (선택)</label>
               <input id="photo" className="photo-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={event => setImageFile(event.target.files?.[0] || null)} />
               <p className="fine-print">사진은 자동 보관을 시도해요. 실패하더라도 원문과 링크는 저장돼요. 직접 사진을 선택하면 그 파일을 저장해요.</p>
@@ -363,7 +386,7 @@ export default function App() {
               {editing ? <>
                 <label htmlFor="edit-title">제목</label><input id="edit-title" className="edit-input" value={editTitle} onChange={event => setEditTitle(event.target.value)} />
                 <label htmlFor="edit-caption" className="field-top">게시글 본문</label><textarea id="edit-caption" rows="12" value={editCaption} onChange={event => setEditCaption(event.target.value)} />
-                <label htmlFor="edit-category" className="field-top">카테고리</label><select id="edit-category" value={editCategory} onChange={event => setEditCategory(event.target.value)}>{CATEGORIES.map(category => <option key={category}>{category}</option>)}</select>
+                <CategoryPicker value={editCategory} onChange={setEditCategory} />
                 <div className="action-row"><button className="small-primary" onClick={updateRecipe} disabled={saving}>수정 저장</button><button className="small-outline" onClick={() => setEditing(false)}>취소</button></div>
               </> : <>
                 <span className="category-tag">{selected.category}</span><h2>{removeInstagramCounts(selected.title)}</h2>
